@@ -1,0 +1,184 @@
+version: '3.8'
+
+# ============================================================
+# CEBD 1261 — Milestone 1 (Infrastructure & Storage)
+# Dataset : Airbnb Market Data Europe (~95k listings)
+#
+# Services :
+#   namenode       — HDFS master (WebHDFS API on port 9870)
+#   datanode       — HDFS worker (data blocks, port 9864)
+#   mongodb        — Document store (exposed on 27015:27017)
+#   elasticsearch  — Search layer (port 9200)
+#   ingest         — One-shot Python job: CSV -> Parquet -> HDFS
+#
+# Workflow :
+#   1. docker compose up -d
+#   2. The "ingest" container runs automatically once HDFS is healthy,
+#      uploads the Parquet file to HDFS, then exits cleanly.
+#   3. Verify:
+#        - http://localhost:9870        (NameNode UI, browse /data/raw)
+#        - mongosh mongodb://localhost:27015
+#        - curl http://localhost:9200
+#
+# Run queries / smoke tests :
+#   docker compose exec ingest python scripts/queries.py
+#   docker compose exec ingest python scripts/check_mongo.py
+#   docker compose exec ingest python scripts/check_es.py
+# ============================================================
+
+x-hadoop-common: &hadoop-common
+  image: apache/hadoop:3.3.6
+  env_file: ./hadoop/hadoop.env
+  networks:
+    - pipeline-net
+
+services:
+
+  # ── HDFS NameNode ───────────────────────────────────────────
+  namenode:
+    <<: *hadoop-common
+    container_name: namenode
+    hostname: namenode
+    user: root
+    ports:
+      - "9870:9870"   # WebHDFS UI + REST API
+      - "8020:8020"   # HDFS RPC
+    command:
+      - bash
+      - -c
+      - |
+        mkdir -p /hadoop/dfs/name
+        chown -R hadoop:hadoop /hadoop/dfs/name
+        su -s /bin/bash hadoop -c "hdfs namenode -format -nonInteractive && hdfs namenode"
+    volumes:
+      - namenode_data:/hadoop/dfs/name
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+
+  # ── HDFS DataNode ───────────────────────────────────────────
+  datanode:
+    <<: *hadoop-common
+    container_name: datanode
+    hostname: datanode
+    user: root
+    ports:
+      - "9864:9864"   # DataNode HTTP UI + WebHDFS data port
+    command:
+      - bash
+      - -c
+      - |
+        mkdir -p /hadoop/dfs/data
+        chown -R hadoop:hadoop /hadoop/dfs/data
+        su -s /bin/bash hadoop -c "hdfs datanode"
+    volumes:
+      - datanode_data:/hadoop/dfs/data
+      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
+      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
+    depends_on:
+      namenode:
+        condition: service_healthy
+
+  # ── MongoDB ─────────────────────────────────────────────────
+  # M1 : service running + reachable. No data load required.
+  # Exposed on host port 27015 to avoid clashing with a local
+  # MongoDB install (default 27017).
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    hostname: mongodb
+    ports:
+      - "27015:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - pipeline-net
+    restart: unless-stopped
+    command: --bind_ip_all
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── ElasticSearch ───────────────────────────────────────────
+  # M1 : service running + reachable. No index population required.
+  # Security disabled (xpack.security.enabled=false) to keep the
+  # local setup simple — production would enable TLS + auth.
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - pipeline-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+
+  # ── Ingest job (one-shot) ───────────────────────────────────
+  # Reads data/AirbnbEuropeMarket.csv, converts to Parquet
+  # (pyarrow engine), uploads to HDFS via WebHDFS.
+  # Stays alive after the job so you can `docker compose exec`
+  # into it to run smoke tests / query scripts.
+  ingest:
+    image: python:3.11-slim
+    container_name: ingest
+    working_dir: /app
+    volumes:
+      - .:/app
+    networks:
+      - pipeline-net
+    depends_on:
+      namenode:
+        condition: service_healthy
+      datanode:
+        condition: service_started
+      mongodb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    command: >
+      bash -c "pip install -q -r requirements.txt
+      && python src/ingest.py
+      && tail -f /dev/null"
+    restart: "no"
+
+# ── Volumes ─────────────────────────────────────────────────────
+volumes:
+  namenode_data:
+  datanode_data:
+  mongodb_data:
+  es_data:
+
+# ── Network ─────────────────────────────────────────────────────
+networks:
+  pipeline-net:
+    driver: bridge
