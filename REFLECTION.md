@@ -25,6 +25,7 @@
 
 - The only AI tool I used was Claude AI.
 - I used Claude to understand the WebHDFS redirect and the Hadoop files, help me write comments in a better written english, help me stucture the Python code (such as making a separate `hdfs_client.py` module) and for better syntax and logic.
+- I used Claude to debug the issues encountered such as the one above, and give me an explanation as to why, so that I can explain it in my own terms
 
 ## What I would improve with more time
 
