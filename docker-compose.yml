@@ -1,7 +1,7 @@
 version: '3.8'
 
 # ============================================================
-# CEBD 1261 — Milestone 1 (Infrastructure & Storage)
+# CEBD 1261 — Milestones
 # Dataset : Airbnb Market Data Europe (~95k listings)
 #
 # Services :
@@ -24,6 +24,9 @@ version: '3.8'
 #   docker compose exec ingest python scripts/queries.py
 #   docker compose exec ingest python scripts/check_mongo.py
 #   docker compose exec ingest python scripts/check_es.py
+#
+# Run Spark pipeline (M2, after ingest):
+#   docker compose run --rm spark_pipeline
 # ============================================================
 
 x-hadoop-common: &hadoop-common
@@ -175,6 +178,48 @@ services:
       bash -c "pip install -q -r requirements.txt
       && python src/ingest.py
       && tail -f /dev/null"
+    restart: "no"
+
+# ── Spark Pipeline (one-shot, MANUAL launch) ────────────────
+  # M2: reads Parquet from HDFS, cleans data, computes derived
+  # columns, writes results to MongoDB and ElasticSearch.
+  #
+  # NOTE: Do NOT rely on `docker compose up` to run this.
+  # Race condition: ingest must finish writing to HDFS first.
+  # Run manually after ingest completes:
+  #     docker compose run --rm spark_pipeline
+  #
+  # The --packages flag pulls the Spark connectors for Mongo and ES
+  # on first run (cached to ~/.ivy2 inside the container).
+  spark_pipeline:
+    image: apache/spark:3.5.3
+    container_name: spark_pipeline
+    working_dir: /app
+    user: root
+    volumes:
+      - .:/app
+    networks:
+      - pipeline-net
+    depends_on:
+      namenode:
+        condition: service_healthy
+      datanode:
+        condition: service_started
+      mongodb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    profiles:
+      - manual
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - >
+        pip install -q pymongo requests
+        && /opt/spark/bin/spark-submit
+        --master local[*]
+        --packages org.mongodb.spark:mongo-spark-connector_2.12:10.3.0,org.elasticsearch:elasticsearch-spark-30_2.12:8.11.4
+        /app/src/spark_pipeline.py
     restart: "no"
 
 # ── Volumes ─────────────────────────────────────────────────────

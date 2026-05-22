@@ -1,7 +1,13 @@
 # Milestone 1 — Infrastructure & Storage
 
+**Name:** Alexandre DJADJAGLO
+
+**Student ID:** 40243644
+
 **Course:** CEBD 1261 — Big Data Infrastructure
+
 **Dataset:** Airbnb Market Data: Europe 373 Cities (Kaggle)
+
 **Stack:** Docker Compose · Hadoop HDFS · MongoDB · ElasticSearch · Python 3.11
 
 This repository sets up the storage layer for the course project. A single

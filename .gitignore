@@ -16,3 +16,8 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# M2 debug outputs (regenerable via scripts)
+spark_run.log
+mongo_queries_output.txt
+es_queries_output.txt
