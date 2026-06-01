@@ -102,18 +102,21 @@ services:
     hostname: mongodb
     ports:
       - "27015:27017"
+    env_file:
+      - .env
     volumes:
       - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
     networks:
       - pipeline-net
     restart: unless-stopped
-    command: --bind_ip_all
+    command: --bind_ip_all --auth
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test: ["CMD", "mongosh", "--quiet", "-u", "admin", "-p", "lab1pass", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping').ok"]   # ← MODIF healthcheck
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 30s
 
   # ── ElasticSearch ───────────────────────────────────────────
   # M1 : service running + reachable. No index population required.
@@ -221,6 +224,32 @@ services:
         --packages org.mongodb.spark:mongo-spark-connector_2.12:10.3.0,org.elasticsearch:elasticsearch-spark-30_2.12:8.11.4
         /app/src/spark_pipeline.py
     restart: "no"
+
+    # ── M3 Agent (FastAPI + LLM) ────────────────────────────────
+  # Natural-language agent: question -> Mongo aggregation -> business report.
+  # Uses agent_readonly Mongo user (read-only at driver level).
+  # Falls back to ElasticSearch if Mongo is unavailable.
+  agent:
+    image: python:3.11-slim
+    container_name: agent
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    networks:
+      - pipeline-net
+    ports:
+      - "8000:8000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    command: >
+      bash -c "pip install -q -r requirements.txt fastapi uvicorn
+      && uvicorn src.agent.app:app --host 0.0.0.0 --port 8000 --log-level info"
+    restart: unless-stopped
 
 # ── Volumes ─────────────────────────────────────────────────────
 volumes:

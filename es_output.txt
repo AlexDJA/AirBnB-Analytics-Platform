@@ -1,0 +1,211 @@
+Connected to ES index 'airbnb_listings': 95412 documents
+
+============================================================================
+Q1 — Premium listings in France
+Query type: bool.filter with two `term` clauses (exact keyword matches)
+============================================================================
+
+Query body sent to ES /airbnb_listings/_search :
+{
+  "track_total_hits": true,
+  "size": 3,
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "term": {
+            "country.keyword": "France"
+          }
+        },
+        {
+          "term": {
+            "is_premium": true
+          }
+        }
+      ]
+    }
+  },
+  "sort": [
+    {
+      "ttm_revenue": "desc"
+    }
+  ],
+  "_source": [
+    "listing_id",
+    "city",
+    "country",
+    "room_type",
+    "superhost",
+    "rating_overall",
+    "ttm_revenue",
+    "is_premium"
+  ]
+}
+
+Total matching documents: 6615
+Showing first 3 hit(s):
+
+{
+  "listing_id": "15835941",
+  "room_type": "entire_home",
+  "superhost": true,
+  "rating_overall": 5.0,
+  "ttm_revenue": 517291.0,
+  "country": "France",
+  "city": "Roquebrune-sur-Argens",
+  "is_premium": true
+}
+{
+  "listing_id": "1864876",
+  "room_type": "entire_home",
+  "superhost": true,
+  "rating_overall": 4.98,
+  "ttm_revenue": 508180.0,
+  "country": "France",
+  "city": "Roquebrune-sur-Argens",
+  "is_premium": true
+}
+{
+  "listing_id": "17740589",
+  "room_type": "entire_home",
+  "superhost": true,
+  "rating_overall": 4.94,
+  "ttm_revenue": 391146.0,
+  "country": "France",
+  "city": "Annecy",
+  "is_premium": true
+}
+
+============================================================================
+Q2 — High-revenue listings (>= $100k) in occupancy tier 'High'
+Query type: bool.filter with a `range` and a `term` clause
+============================================================================
+
+Query body sent to ES /airbnb_listings/_search :
+{
+  "track_total_hits": true,
+  "size": 3,
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "range": {
+            "ttm_revenue": {
+              "gte": 100000
+            }
+          }
+        },
+        {
+          "term": {
+            "occupancy_tier.keyword": "High"
+          }
+        }
+      ]
+    }
+  },
+  "sort": [
+    {
+      "ttm_revenue": "desc"
+    }
+  ],
+  "_source": [
+    "listing_id",
+    "city",
+    "country",
+    "room_type",
+    "ttm_revenue",
+    "ttm_occupancy",
+    "occupancy_tier"
+  ]
+}
+
+Total matching documents: 514
+Showing first 3 hit(s):
+
+{
+  "listing_id": "15835941",
+  "room_type": "entire_home",
+  "ttm_revenue": 517291.0,
+  "ttm_occupancy": 0.849,
+  "country": "France",
+  "city": "Roquebrune-sur-Argens",
+  "occupancy_tier": "High"
+}
+{
+  "listing_id": "1864876",
+  "room_type": "entire_home",
+  "ttm_revenue": 508180.0,
+  "ttm_occupancy": 0.668,
+  "country": "France",
+  "city": "Roquebrune-sur-Argens",
+  "occupancy_tier": "High"
+}
+{
+  "listing_id": "12005090",
+  "room_type": "entire_home",
+  "ttm_revenue": 499672.0,
+  "ttm_occupancy": 0.762,
+  "country": "Portugal",
+  "city": "Funchal",
+  "occupancy_tier": "High"
+}
+
+============================================================================
+Q3 — Listings with 'pool' in amenities (full-text search)
+Query type: match query (text analysis on the `amenities` field)
+============================================================================
+
+Query body sent to ES /airbnb_listings/_search :
+{
+  "track_total_hits": true,
+  "size": 3,
+  "query": {
+    "match": {
+      "amenities": "pool"
+    }
+  },
+  "sort": [
+    {
+      "rating_overall": "desc"
+    },
+    "_score"
+  ],
+  "_source": [
+    "listing_id",
+    "city",
+    "country",
+    "room_type",
+    "rating_overall",
+    "num_reviews"
+  ]
+}
+
+Total matching documents: 17049
+Showing first 3 hit(s):
+
+{
+  "listing_id": "20475280",
+  "room_type": "entire_home",
+  "num_reviews": 5.0,
+  "rating_overall": 5.0,
+  "country": "France",
+  "city": "Saint Martin (France)"
+}
+{
+  "listing_id": "17051172",
+  "room_type": "entire_home",
+  "num_reviews": 4.0,
+  "rating_overall": 5.0,
+  "country": "Spain",
+  "city": "Salou"
+}
+{
+  "listing_id": "552015377962869654",
+  "room_type": "private_room",
+  "num_reviews": 5.0,
+  "rating_overall": 5.0,
+  "country": "United Kingdom",
+  "city": "Salford"
+}
+
+All 3 ES queries completed.

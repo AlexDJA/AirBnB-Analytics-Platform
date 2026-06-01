@@ -257,4 +257,148 @@ serve; Q3 is the one that needs a search engine.
 - [x] 3 ElasticSearch filter queries (different types: `term`, `range+bool`, `match`)
 - [x] README updated with M2 sections + full name + student ID
 - [x] REFLECTION.md updated with M2 design decisions
-- [ ] GitHub release tagged `M2`
+
+---
+
+# Milestone 3 — Agent & Safeguards
+
+**Submitted by:** Alexandre DJADJAGLO — Student ID *[Your Student ID]*
+
+This milestone adds a natural-language agent on top of the M2 datastore. It
+turns plain-English business questions into MongoDB aggregation pipelines,
+executes them safely, and answers in plain English — all behind a layer of
+four mandatory safeguards plus prompt-injection detection.
+
+## 14. M3 architecture
+
+```
+                 ┌─────────────────────┐
+   User input ─▶│  Injection detector │ ─── matched → locked role reply
+                 └──────────┬──────────┘
+                            ▼
+                 ┌─────────────────────┐
+                 │ Small-talk detector │ ─── matched → canned chat reply
+                 └──────────┬──────────┘
+                            ▼
+                 ┌─────────────────────┐
+                 │   LLM call 1        │
+                 │ (OpenRouter)        │
+                 │   → JSON pipeline   │
+                 └──────────┬──────────┘
+                            ▼
+                 ┌─────────────────────┐
+                 │  Query validator    │ ─── rejected → log + error reply
+                 │  (Safeguard 3)      │
+                 └──────────┬──────────┘
+                            ▼
+                 ┌─────────────────────┐
+                 │  Mongo (read-only)  │ ─── unreachable
+                 │  agent_readonly     │      │
+                 │  (Safeguard 1)      │      ▼
+                 └──────────┬──────────┘   ┌─────────────────┐
+                            │              │ ElasticSearch   │ ─── unreachable
+                            │              │ (Safeguard 4)   │      │
+                            │              └────────┬────────┘      ▼
+                            │                       │           ┌──────────────┐
+                            ▼                       ▼           │ Stale cache  │
+                 ┌─────────────────────────────────────┐        │ (Safeguard 4)│
+                 │  Hallucination guard (Safeguard 2)  │        └──────────────┘
+                 │  empty result → "No data found"     │
+                 └──────────┬──────────────────────────┘
+                            ▼
+                 ┌─────────────────────┐
+                 │   LLM call 2        │
+                 │ (format records     │
+                 │  into Markdown)     │
+                 └──────────┬──────────┘
+                            ▼
+                       User reply
+```
+
+A new `agent` service was added to `docker-compose.yml` exposing port 8000.
+It serves a Vue.js single-page interface and a `POST /ask` JSON API.
+
+## 15. Running the agent
+
+```bash
+docker compose up -d
+# Wait ~30 seconds for the agent to install fastapi/uvicorn and start.
+# Then open http://localhost:8000 in a browser.
+```
+
+The agent uses OpenRouter for both the query-generation and report-formatting
+LLM calls. Set `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` in `.env` —
+`meta-llama/llama-3.3-70b-instruct:free` and `openai/gpt-oss-20b:free` are
+both known to work; the more compact the JSON the model emits, the better.
+
+## 16. The four safeguards
+
+### Safeguard 1 — Read-only enforcement (driver level)
+
+The agent connects to MongoDB as the `agent_readonly` user, created by
+`mongo-init/init-users.js` with the built-in `read` role on the `airbnb`
+database. Any insert/update/delete sent over the wire — even one that
+bypasses our Python-level validator — is rejected by Mongo itself with
+`MongoServerError: not authorized on airbnb to execute command`.
+
+This is **defense in depth**: the Python validator catches write ops in the
+LLM output, *and* the database refuses to execute them even if they slipped
+through.
+
+### Safeguard 2 — Hallucination guard
+
+After execution, `check_hallucination_guard(records)` checks whether the
+record list is empty. If so, the agent returns the canonical message
+`"No data found for this query."` **without ever asking the LLM** to
+summarize an empty result. The LLM is therefore structurally unable to
+invent a story when there's nothing to summarize.
+
+### Safeguard 3 — Query validator
+
+Every LLM-generated pipeline is passed through `validate_pipeline()` before
+being sent to MongoDB. Rejections happen on three classes of issue:
+
+1. **Structural** — pipeline is not a list of single-key objects.
+2. **Operation** — uses a forbidden stage (`$out`, `$merge`, `$function`...)
+   or a stage outside the allow list.
+3. **Collection** — targets a collection that doesn't exist in the `airbnb`
+   database.
+
+Every rejection writes a JSON line to `logs/safeguard.log` with the reason,
+the offending stage, and the timestamp.
+
+### Safeguard 4 — Failure handling (Mongo → ES → cache)
+
+`execute_with_fallback()` tries the three backends in order:
+1. MongoDB primary (the typed read-only connection),
+2. ElasticSearch, with a best-effort translation of `$match`/`$limit` stages,
+3. A local JSON cache of the last successful result (with a stale timestamp).
+
+If all three fail, the agent returns a descriptive error message — it never
+crashes the request. Every fallback step is logged to `logs/agent.log`.
+
+## 17. Injection protection
+
+In addition to the 4 safeguards above, `detect_injection()` scans the user
+input against 6 regex patterns covering the classic jailbreak families:
+"ignore previous instructions", "disregard / override / forget", role swap
+("you are now a..."), "pretend to be / act as", system-prompt exfiltration
+("repeat your system prompt"), and DAN-style attacks.
+
+On match, the agent returns a **locked role response** and writes an audit
+entry to `logs/audit.log` with `"injection_detected": true` and the pattern
+that matched. The LLM is never called for those requests.
+
+## 18. M3 deliverables checklist
+
+- [x] Agent connected to OpenRouter, handles natural-language questions
+- [x] Generates Mongo aggregation pipelines, executes them safely
+- [x] Returns plain-English Markdown business reports
+- [x] Handles summary / top-N / trend / anomaly questions
+- [x] Safeguard 1: Read-only enforcement at driver level
+- [x] Safeguard 2: Hallucination guard ("No data found")
+- [x] Safeguard 3: Query validator (writes to `logs/safeguard.log`)
+- [x] Safeguard 4: Mongo → ES → cache fallback chain
+- [x] Injection detection on every user message
+- [x] `logs/agent.log` + `logs/audit.log` + `logs/safeguard.log`
+- [x] Web UI at http://localhost:8000

@@ -1,0 +1,202 @@
+Connected to airbnb.listings: 95412 documents
+
+============================================================================
+Q1 — Revenue and efficiency by occupancy_tier
+Operation used: $group  (with $match upfront to drop null tiers)
+============================================================================
+{
+  "listings_count": 12599,
+  "occupancy_tier": "High",
+  "avg_ttm_revenue_usd": 38618.22,
+  "avg_revenue_per_booked_day": 147.26,
+  "avg_occupancy": 0.722
+}
+{
+  "listings_count": 29942,
+  "occupancy_tier": "Medium",
+  "avg_ttm_revenue_usd": 26250.98,
+  "avg_revenue_per_booked_day": 166.3,
+  "avg_occupancy": 0.435
+}
+{
+  "listings_count": 52304,
+  "occupancy_tier": "Low",
+  "avg_ttm_revenue_usd": 9540.9,
+  "avg_revenue_per_booked_day": 183.24,
+  "avg_occupancy": 0.144
+}
+
+============================================================================
+Q2 — Top 10 listings by revenue_per_booked_day
+Operation used: $sort + $limit  (with $match upfront to drop nulls)
+============================================================================
+{
+  "listing_id": "15787184",
+  "room_type": "entire_home",
+  "rating_overall": 4.9,
+  "ttm_revenue": 91655.0,
+  "ttm_reserved_days": 20.0,
+  "country": "United Kingdom",
+  "city": "Derbyshire Dales",
+  "revenue_per_booked_day": 4582.75
+}
+{
+  "listing_id": "20471461",
+  "room_type": "entire_home",
+  "rating_overall": null,
+  "ttm_revenue": 170924.0,
+  "ttm_reserved_days": 39.0,
+  "country": "France",
+  "city": "Saint Martin (France)",
+  "revenue_per_booked_day": 4382.67
+}
+{
+  "listing_id": "10713126",
+  "room_type": "entire_home",
+  "rating_overall": 4.85,
+  "ttm_revenue": 257388.0,
+  "ttm_reserved_days": 59.0,
+  "country": "United Kingdom",
+  "city": "Derbyshire Dales",
+  "revenue_per_booked_day": 4362.51
+}
+{
+  "listing_id": "7466111",
+  "room_type": "entire_home",
+  "rating_overall": 4.78,
+  "ttm_revenue": 60058.0,
+  "ttm_reserved_days": 14.0,
+  "country": "Ireland",
+  "city": "Kenmare Municipal District",
+  "revenue_per_booked_day": 4289.86
+}
+{
+  "listing_id": "19466040",
+  "room_type": "entire_home",
+  "rating_overall": 4.27,
+  "ttm_revenue": 778065.0,
+  "ttm_reserved_days": 186.0,
+  "country": "Spain",
+  "city": "Palma",
+  "revenue_per_booked_day": 4183.15
+}
+{
+  "listing_id": "13944707",
+  "room_type": "entire_home",
+  "rating_overall": 4.82,
+  "ttm_revenue": 66209.0,
+  "ttm_reserved_days": 16.0,
+  "country": "United Kingdom",
+  "city": "East Suffolk",
+  "revenue_per_booked_day": 4138.06
+}
+{
+  "listing_id": "4109262",
+  "room_type": "entire_home",
+  "rating_overall": 5.0,
+  "ttm_revenue": 127109.0,
+  "ttm_reserved_days": 31.0,
+  "country": "Portugal",
+  "city": "Cascais",
+  "revenue_per_booked_day": 4100.29
+}
+{
+  "listing_id": "20520978",
+  "room_type": "entire_home",
+  "rating_overall": 5.0,
+  "ttm_revenue": 127736.0,
+  "ttm_reserved_days": 32.0,
+  "country": "France",
+  "city": "Saint Martin (France)",
+  "revenue_per_booked_day": 3991.75
+}
+{
+  "listing_id": "13512441",
+  "room_type": "entire_home",
+  "rating_overall": 4.7,
+  "ttm_revenue": 46913.0,
+  "ttm_reserved_days": 12.0,
+  "country": "Portugal",
+  "city": "Vila Nova de Gaia",
+  "revenue_per_booked_day": 3909.42
+}
+{
+  "listing_id": "3359804",
+  "room_type": "entire_home",
+  "rating_overall": 4.97,
+  "ttm_revenue": 162465.0,
+  "ttm_reserved_days": 44.0,
+  "country": "United Kingdom",
+  "city": "East Suffolk",
+  "revenue_per_booked_day": 3692.39
+}
+
+============================================================================
+Q3 — High-performer segment (occupancy High + price > $200 + 50+ reviews)
+Operation used: $match  (composite business filter on derived + native columns)
+============================================================================
+Segment size: 2063 listings match all 3 conditions
+Showing top 5 by revenue_per_booked_day:
+
+{
+  "listing_id": "1864876",
+  "room_type": "entire_home",
+  "superhost": true,
+  "num_reviews": 125.0,
+  "rating_overall": 4.98,
+  "ttm_occupancy": 0.668,
+  "country": "France",
+  "city": "Roquebrune-sur-Argens",
+  "revenue_per_booked_day": 2082.7,
+  "is_premium": true
+}
+{
+  "listing_id": "12005090",
+  "room_type": "entire_home",
+  "superhost": true,
+  "num_reviews": 83.0,
+  "rating_overall": 4.84,
+  "ttm_occupancy": 0.762,
+  "country": "Portugal",
+  "city": "Funchal",
+  "revenue_per_booked_day": 1797.38,
+  "is_premium": true
+}
+{
+  "listing_id": "6668012",
+  "room_type": "entire_home",
+  "superhost": true,
+  "num_reviews": 227.0,
+  "rating_overall": 4.91,
+  "ttm_occupancy": 0.638,
+  "country": "United Kingdom",
+  "city": "Canterbury",
+  "revenue_per_booked_day": 1692.09,
+  "is_premium": true
+}
+{
+  "listing_id": "15835941",
+  "room_type": "entire_home",
+  "superhost": true,
+  "num_reviews": 91.0,
+  "rating_overall": 5.0,
+  "ttm_occupancy": 0.849,
+  "country": "France",
+  "city": "Roquebrune-sur-Argens",
+  "revenue_per_booked_day": 1668.68,
+  "is_premium": true
+}
+{
+  "listing_id": "14492279",
+  "room_type": "entire_home",
+  "superhost": false,
+  "num_reviews": 82.0,
+  "rating_overall": 4.79,
+  "ttm_occupancy": 0.819,
+  "country": "Portugal",
+  "city": "Funchal",
+  "revenue_per_booked_day": 1658.22,
+  "is_premium": false
+}
+
+All 3 Mongo queries completed.

@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Airbnb Analytics Agent — M3</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.21/vue.global.prod.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:        #0F2240;
+      --teal:        #0D9488;
+      --teal-soft:   #CCFBF1;
+      --teal-mid:    #5EEAD4;
+      --yellow:      #FCD34D;
+      --yellow-soft: #FEF9C3;
+
+      --bg:          #F4F6F9;
+      --surface:     #FFFFFF;
+      --border:      #E2E8F0;
+      --border-soft: #F1F5F9;
+
+      --text-primary:   #0F172A;
+      --text-secondary: #475569;
+      --text-muted:     #94A3B8;
+
+      --error:       #EF4444;
+      --error-soft:  #FEF2F2;
+      --error-border:#FECACA;
+
+      --warning:       #D97706;
+      --warning-soft:  #FEF3C7;
+      --warning-border:#FDE68A;
+
+      --radius-sm: 6px;
+      --radius:    12px;
+      --radius-lg: 18px;
+
+      --font-body: 'DM Sans', sans-serif;
+      --font-mono: 'DM Mono', monospace;
+
+      --shadow-sm: 0 1px 3px rgba(15,34,64,0.06), 0 1px 2px rgba(15,34,64,0.04);
+      --shadow:    0 4px 16px rgba(15,34,64,0.08), 0 2px 4px rgba(15,34,64,0.04);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font-body);
+      background: var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #app {
+      display: flex;
+      height: 100vh;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────────── */
+    .sidebar {
+      width: 280px;
+      flex-shrink: 0;
+      background: var(--navy);
+      display: flex;
+      flex-direction: column;
+      padding: 28px 20px;
+      gap: 26px;
+    }
+
+    .brand-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.3);
+    }
+
+    .brand-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: #fff;
+      margin-top: 5px;
+      line-height: 1.25;
+    }
+
+    .brand-sub {
+      font-size: 12px;
+      color: var(--teal-mid);
+      margin-top: 4px;
+    }
+
+    .sb-section { display: flex; flex-direction: column; gap: 8px; }
+
+    .sb-section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.25);
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .tool-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .tool-card-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .tool-card-name { font-size: 13px; font-weight: 500; color: #fff; }
+    .tool-card-desc { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 2px; line-height: 1.45; }
+
+    .sb-footer {
+      margin-top: auto;
+      font-size: 11px;
+      color: rgba(255,255,255,0.22);
+      line-height: 1.55;
+    }
+    .sb-footer code { font-family: var(--font-mono); color: var(--teal-mid); }
+
+    /* ── Main ────────────────────────────────────────────────────────────── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--bg);
+    }
+
+    /* ── Topbar ──────────────────────────────────────────────────────────── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .topbar-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .pipeline {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+    }
+    .pipeline::-webkit-scrollbar { height: 0; }
+
+    .p-step {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      border: 1.5px solid var(--border);
+      white-space: nowrap;
+      transition: all 0.3s ease;
+      flex-shrink: 0;
+    }
+    .p-step.active    { border-color: var(--teal); color: var(--teal); background: var(--teal-soft); }
+    .p-step.done      { border-color: transparent; color: var(--teal); background: var(--teal-soft); }
+    .p-step.blocked   { border-color: var(--error); color: var(--error); background: var(--error-soft); }
+    .p-step.warning   { border-color: var(--warning); color: var(--warning); background: var(--warning-soft); }
+    .p-arrow { color: var(--border); font-size: 13px; }
+
+    .p-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pdot 0.9s infinite;
+    }
+    @keyframes pdot {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.3; transform: scale(0.65); }
+    }
+
+    /* ── Messages ────────────────────────────────────────────────────────── */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      scroll-behavior: smooth;
+    }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Welcome ─────────────────────────────────────────────────────────── */
+    .welcome {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 18px;
+      text-align: center;
+      padding: 32px;
+    }
+
+    .welcome-icon {
+      width: 54px; height: 54px;
+      background: var(--navy);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px;
+      box-shadow: var(--shadow);
+    }
+
+    .welcome h2 {
+      font-size: 21px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .welcome p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      max-width: 460px;
+      line-height: 1.7;
+    }
+
+    .suggestions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      width: 100%;
+      max-width: 580px;
+    }
+
+    .sug-btn {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-family: var(--font-body);
+      font-size: 12.5px;
+      text-align: left;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .sug-btn:hover {
+      border-color: var(--teal);
+      background: var(--teal-soft);
+      color: var(--text-primary);
+    }
+
+    /* ── Bubbles ─────────────────────────────────────────────────────────── */
+    .msg-row {
+      display: flex;
+      gap: 10px;
+      max-width: 88%;
+    }
+    .msg-row.user { align-self: flex-end; flex-direction: row-reverse; }
+
+    .avatar {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .avatar.user  { background: var(--yellow-soft); }
+    .avatar.agent { background: var(--teal-soft); }
+
+    .bubble {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 15px;
+      font-size: 14px;
+      color: var(--text-primary);
+      line-height: 1.6;
+      box-shadow: var(--shadow-sm);
+    }
+    .msg-row.user .bubble {
+      background: var(--navy);
+      color: #fff;
+      border-color: var(--navy);
+      white-space: pre-wrap;
+    }
+
+    /* Markdown content inside the agent bubble */
+    .md p           { margin: 0 0 8px; }
+    .md p:last-child{ margin-bottom: 0; }
+    .md ul, .md ol  { margin: 4px 0 8px 22px; }
+    .md li          { margin: 2px 0; }
+    .md strong      { color: var(--text-primary); font-weight: 600; }
+    .md em          { color: var(--text-secondary); }
+    .md code        { font-family: var(--font-mono); font-size: 0.9em;
+                      background: var(--border-soft); padding: 1px 5px; border-radius: 4px; }
+
+    .bubble-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 10.5px;
+      font-family: var(--font-mono);
+      font-weight: 500;
+    }
+    .tag.source-mongodb       { background: var(--teal-soft); color: var(--teal); }
+    .tag.source-elasticsearch { background: var(--warning-soft); color: var(--warning); }
+    .tag.source-safeguard     { background: var(--error-soft); color: var(--error); }
+    .tag.source-cache         { background: var(--warning-soft); color: var(--warning); }
+    .tag.source-error         { background: var(--error-soft); color: var(--error); }
+    .tag.records              { background: var(--border-soft); color: var(--text-secondary); }
+
+    .error-bubble {
+      background: var(--error-soft);
+      border: 1px solid var(--error-border);
+      color: var(--error);
+      padding: 12px 15px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .warning-bubble {
+      background: var(--warning-soft);
+      border: 1px solid var(--warning-border);
+      color: #92400E;
+      padding: 12px 15px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* ── Thinking ────────────────────────────────────────────────────────── */
+    .thinking {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      box-shadow: var(--shadow-sm);
+    }
+    .dots { display: flex; gap: 4px; }
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--teal);
+      animation: thinkpulse 1.2s infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.15s; }
+    .dot:nth-child(3) { animation-delay: 0.30s; }
+    @keyframes thinkpulse {
+      0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
+      40%         { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── Input ───────────────────────────────────────────────────────────── */
+    .input-area {
+      flex-shrink: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 16px 20px;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+    .input-wrap { flex: 1; }
+    textarea {
+      width: 100%;
+      min-height: 42px;
+      max-height: 110px;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      resize: none;
+      font-family: var(--font-body);
+      font-size: 14px;
+      color: var(--text-primary);
+      background: var(--bg);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    textarea:focus { border-color: var(--teal); background: var(--surface); }
+    .input-hint {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      font-family: var(--font-mono);
+    }
+    .send-btn {
+      background: var(--navy);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      width: 42px; height: 42px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .send-btn:hover:not(:disabled) { background: var(--teal); }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .send-btn svg { width: 18px; height: 18px; fill: currentColor; }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div>
+      <div class="brand-label">CEBD 1261 · M3</div>
+      <div class="brand-title">Airbnb Analytics<br>Agent</div>
+      <div class="brand-sub">95,412 European listings</div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-section-label">Question types</div>
+      <div class="tool-card">
+        <span class="tool-card-icon">📊</span>
+        <div>
+          <div class="tool-card-name">Summary</div>
+          <div class="tool-card-desc">Counts, averages, distributions</div>
+        </div>
+      </div>
+      <div class="tool-card">
+        <span class="tool-card-icon">🏆</span>
+        <div>
+          <div class="tool-card-name">Top / Bottom N</div>
+          <div class="tool-card-desc">Leaderboards by any metric</div>
+        </div>
+      </div>
+      <div class="tool-card">
+        <span class="tool-card-icon">📈</span>
+        <div>
+          <div class="tool-card-name">Trends</div>
+          <div class="tool-card-desc">Compare segments side-by-side</div>
+        </div>
+      </div>
+      <div class="tool-card">
+        <span class="tool-card-icon">🔍</span>
+        <div>
+          <div class="tool-card-name">Anomalies</div>
+          <div class="tool-card-desc">Outliers and rare patterns</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-section-label">Active safeguards</div>
+      <div class="tool-card">
+        <span class="tool-card-icon">🔒</span>
+        <div>
+          <div class="tool-card-name">Read-only Mongo</div>
+          <div class="tool-card-desc">Driver-level enforcement</div>
+        </div>
+      </div>
+      <div class="tool-card">
+        <span class="tool-card-icon">✅</span>
+        <div>
+          <div class="tool-card-name">Query validator</div>
+          <div class="tool-card-desc">Rejects writes, bad collections</div>
+        </div>
+      </div>
+      <div class="tool-card">
+        <span class="tool-card-icon">🛡️</span>
+        <div>
+          <div class="tool-card-name">Injection detection</div>
+          <div class="tool-card-desc">Locks role on jailbreak attempts</div>
+        </div>
+      </div>
+      <div class="tool-card">
+        <span class="tool-card-icon">🔄</span>
+        <div>
+          <div class="tool-card-name">Failure fallback</div>
+          <div class="tool-card-desc">Mongo → ES → cached result</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sb-footer">
+      Backend: <code>FastAPI</code><br>
+      Storage: <code>MongoDB · ElasticSearch</code><br>
+      Model: <code>{{ modelShort }}</code>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- Pipeline indicator -->
+    <div class="topbar">
+      <span class="topbar-label">Pipeline</span>
+      <div class="pipeline">
+        <template v-for="step in pipelineSteps" :key="step.id">
+          <span v-if="step.type === 'arrow'" class="p-arrow">›</span>
+          <div v-else :class="['p-step', step.status]">
+            <span v-if="step.status === 'active'" class="p-dot"></span>
+            <span v-else>{{ step.icon }}</span>
+            {{ step.label }}
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div class="messages" ref="messagesEl">
+
+      <!-- Welcome -->
+      <div class="welcome" v-if="messages.length === 0">
+        <div class="welcome-icon">🏠</div>
+        <h2>Ask anything about the dataset</h2>
+        <p>Natural-language questions about 95,412 European Airbnb listings. The agent translates your question into a MongoDB aggregation, executes it safely, and answers in plain English.</p>
+        <div class="suggestions">
+          <button class="sug-btn" v-for="s in suggestions" :key="s.text" @click="sendSuggestion(s.text)">
+            {{ s.emoji }}&nbsp; {{ s.text }}
+          </button>
+        </div>
+      </div>
+
+      <template v-for="msg in messages" :key="msg.id">
+
+        <!-- User -->
+        <div class="msg-row user" v-if="msg.role === 'user'">
+          <div class="avatar user">👤</div>
+          <div class="bubble">{{ msg.text }}</div>
+        </div>
+
+        <!-- Agent -->
+        <div class="msg-row agent" v-else-if="msg.role === 'agent'">
+          <div class="avatar agent">🤖</div>
+          <div class="bubble">
+            <div class="md" v-html="renderMd(msg.text)"></div>
+            <div class="bubble-meta" v-if="msg.source">
+              <span :class="['tag', sourceClass(msg.source)]">{{ sourceLabel(msg.source) }}</span>
+              <span class="tag records" v-if="msg.records !== undefined">{{ msg.records }} records</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Thinking -->
+        <div class="msg-row agent" v-else-if="msg.role === 'thinking'">
+          <div class="avatar agent">🤖</div>
+          <div class="thinking">
+            <div class="dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+            <span>{{ msg.text }}</span>
+          </div>
+        </div>
+
+        <!-- Error -->
+        <div class="msg-row agent" v-else-if="msg.role === 'error'">
+          <div class="avatar agent">🤖</div>
+          <div class="error-bubble">⚠️ {{ msg.text }}</div>
+        </div>
+
+      </template>
+    </div>
+
+    <!-- Input -->
+    <div class="input-area">
+      <div class="input-wrap">
+        <textarea
+          v-model="input"
+          placeholder="e.g. What are the top 5 cities by total revenue?"
+          @keydown.enter.exact.prevent="send"
+          @input="autoResize"
+          ref="inputEl"
+          :disabled="loading"
+        ></textarea>
+        <div class="input-hint">↵ send &nbsp;·&nbsp; ⇧↵ new line</div>
+      </div>
+      <button class="send-btn" @click="send" :disabled="loading || !input.trim()">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const { createApp, ref, computed, nextTick } = Vue
+
+createApp({
+  setup() {
+    // The page is served by the agent itself on port 8000, so '/ask' is same-origin.
+    const API_URL = ''
+
+    const messages   = ref([])
+    const input      = ref('')
+    const loading    = ref(false)
+    const messagesEl = ref(null)
+    const inputEl    = ref(null)
+    let   msgId      = 0
+
+    const modelShort = ref('gpt-oss-20b')
+
+    const suggestions = [
+      { emoji: '📊', text: 'Give me a summary of the dataset' },
+      { emoji: '🏆', text: 'Top 5 cities by total revenue' },
+      { emoji: '📈', text: 'Compare High vs Low occupancy tiers' },
+      { emoji: '🔍', text: 'Listings with revenue per booked day above $2000' },
+      { emoji: '🌍', text: 'How many premium listings in France?' },
+      { emoji: '🏠', text: 'How many superhosts have rating 5.0?' },
+    ]
+
+    const STEPS = [
+      { id: 'guard',    icon: '🛡️', label: 'Guard' },
+      { id: 'a1', type: 'arrow' },
+      { id: 'generate', icon: '🧠', label: 'Generate' },
+      { id: 'a2', type: 'arrow' },
+      { id: 'validate', icon: '✅', label: 'Validate' },
+      { id: 'a3', type: 'arrow' },
+      { id: 'execute',  icon: '🗄️', label: 'Execute' },
+      { id: 'a4', type: 'arrow' },
+      { id: 'report',   icon: '📝', label: 'Report' },
+    ]
+
+    const pipelineSteps = ref(STEPS.map(s => ({ ...s, status: '' })))
+
+    const resetSteps   = ()       => pipelineSteps.value.forEach(s => s.status = '')
+    const setStep      = (id, st) => { const s = pipelineSteps.value.find(s => s.id === id); if (s) s.status = st }
+    const activateStep = async (id, ms = 400) => {
+      setStep(id, 'active')
+      await new Promise(r => setTimeout(r, ms))
+      setStep(id, 'done')
+    }
+
+    const scrollBottom = async () => {
+      await nextTick()
+      if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
+    }
+
+    const autoResize = (e) => {
+      const el = e.target
+      el.style.height = 'auto'
+      el.style.height = Math.min(el.scrollHeight, 110) + 'px'
+    }
+
+    const sourceClass = (source) => {
+      if (!source) return ''
+      if (source.startsWith('safeguard')) return 'source-safeguard'
+      if (source.startsWith('error'))     return 'source-error'
+      if (source.startsWith('cache'))     return 'source-cache'
+      if (source.startsWith('elasticsearch')) return 'source-elasticsearch'
+      if (source.startsWith('mongodb'))   return 'source-mongodb'
+      if (source.startsWith('small-talk')) return 'source-mongodb'
+      return ''
+    }
+
+    const sourceLabel = (source) => {
+      if (!source) return ''
+      if (source.startsWith('safeguard:injection')) return '🛡️ injection blocked'
+      if (source.startsWith('safeguard:validator')) return '✅ query rejected'
+      if (source.startsWith('mongodb'))             return '🗄️ MongoDB'
+      if (source.startsWith('elasticsearch'))       return '🔍 ElasticSearch (fallback)'
+      if (source.startsWith('cache'))               return '💾 cached (stale)'
+      if (source.startsWith('error'))               return '⚠️ ' + source.replace('error:', '')
+      if (source === 'small-talk:greeting')         return '👋 greeting'
+      if (source === 'small-talk:thanks')           return '🙏 thanks'
+      if (source.startsWith('small-talk'))          return '💬 chat'
+      return source
+    }
+
+    // Render Markdown safely. We strip script tags as a belt-and-suspenders
+    // measure even though our agent never produces them.
+    const renderMd = (text) => {
+      if (!text) return ''
+      const html = marked.parse(text, { breaks: true, gfm: true })
+      return html.replace(/<script[\s\S]*?<\/script>/gi, '')
+    }
+
+    const send = async () => {
+      const question = input.value.trim()
+      if (!question || loading.value) return
+
+      messages.value.push({ id: ++msgId, role: 'user', text: question })
+      input.value = ''
+      if (inputEl.value) inputEl.value.style.height = 'auto'
+      await scrollBottom()
+
+      const thinkingId = ++msgId
+      const setThinking = (text) => {
+        const m = messages.value.find(m => m.id === thinkingId)
+        if (m) m.text = text
+      }
+
+      messages.value.push({ id: thinkingId, role: 'thinking', text: 'Checking for injection patterns…' })
+      loading.value = true
+      resetSteps()
+      await scrollBottom()
+
+      try {
+        const animate = async () => {
+          await activateStep('guard', 150)
+          setThinking('Generating MongoDB pipeline…')
+          await activateStep('generate', 300)
+          setThinking('Validating the query…')
+          await activateStep('validate', 150)
+          setThinking('Querying the database…')
+          await activateStep('execute', 300)
+          setThinking('Formatting the report…')
+        }
+
+        const [data] = await Promise.all([
+          fetch(`${API_URL}/ask`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question }),
+          }).then(async r => {
+            const body = await r.json()
+            if (!r.ok) throw new Error(body.response || body.detail || 'Server error')
+            return body
+          }),
+          animate(),
+        ])
+
+        // Mark the right step depending on result type
+        if (data.source && data.source.startsWith('safeguard:injection'))      setStep('guard', 'blocked')
+        else if (data.source && data.source.startsWith('safeguard:validator')) setStep('validate', 'blocked')
+        else if (data.source && data.source.startsWith('elasticsearch'))       setStep('execute', 'warning')
+        else if (data.source && data.source.startsWith('cache'))               setStep('execute', 'warning')
+
+        await activateStep('report', 300)
+
+        const idx = messages.value.findIndex(m => m.id === thinkingId)
+        if (idx !== -1) {
+          messages.value[idx] = {
+            id: thinkingId,
+            role: 'agent',
+            text: data.response,
+            source: data.source,
+            records: data.records_returned,
+          }
+        }
+
+      } catch (err) {
+        const idx = messages.value.findIndex(m => m.id === thinkingId)
+        if (idx !== -1) messages.value[idx] = { id: thinkingId, role: 'error', text: err.message }
+        resetSteps()
+      } finally {
+        loading.value = false
+        await scrollBottom()
+      }
+    }
+
+    const sendSuggestion = (text) => { input.value = text; send() }
+
+    return {
+      messages, input, loading, messagesEl, inputEl,
+      modelShort, suggestions, pipelineSteps,
+      send, sendSuggestion, autoResize, sourceClass, sourceLabel, renderMd,
+    }
+  }
+}).mount('#app')
+</script>
+</body>
+</html>

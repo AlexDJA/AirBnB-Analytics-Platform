@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 # Inside the Docker network we reach MongoDB by its service hostname on its
 # internal port 27017 (the 27015 mapping is only for host->container).
-MONGO_URI = "mongodb://mongodb:27017"
+MONGO_URI = "mongodb://admin:lab1pass@mongodb:27017/?authSource=admin"
 
 
 def main() -> int:

@@ -21,7 +21,7 @@ from typing import Any
 from pymongo import MongoClient
 
 # Inside the Docker network we reach Mongo by its service hostname.
-MONGO_URI = "mongodb://mongodb:27017"
+MONGO_URI = "mongodb://spark_writer:sparkpass@mongodb:27017/airbnb?authSource=airbnb"
 DB_NAME = "airbnb"
 COLLECTION = "listings"
 

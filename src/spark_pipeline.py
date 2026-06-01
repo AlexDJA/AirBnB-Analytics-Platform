@@ -40,7 +40,7 @@ from pyspark.sql.types import BooleanType
 # ── configuration ─────────────────────────────────────────────────────────
 HDFS_PARQUET_URI = "hdfs://namenode:8020/data/raw/airbnb_europe.parquet"
 
-MONGO_URI = "mongodb://mongodb:27017"
+MONGO_URI = "mongodb://spark_writer:sparkpass@mongodb:27017/airbnb?authSource=airbnb"
 MONGO_DB = "airbnb"
 MONGO_COLLECTION = "listings"
 
