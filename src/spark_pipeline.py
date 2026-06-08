@@ -32,13 +32,17 @@ import sys
 from pathlib import Path
 
 import requests
+import os
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import BooleanType
 
 
 # ── configuration ─────────────────────────────────────────────────────────
-HDFS_PARQUET_URI = "hdfs://namenode:8020/data/raw/airbnb_europe.parquet"
+# M4: read Parquet from S3 instead of HDFS.
+S3_BUCKET       = os.environ.get("S3_BUCKET", "airbnb-m4-alexdja")
+S3_PARQUET_KEY  = os.environ.get("S3_PARQUET_KEY", "processed/airbnb_europe.parquet")
+PARQUET_URI     = f"s3a://{S3_BUCKET}/{S3_PARQUET_KEY}"
 
 MONGO_URI = "mongodb://spark_writer:sparkpass@mongodb:27017/airbnb?authSource=airbnb"
 MONGO_DB = "airbnb"
@@ -84,6 +88,11 @@ def create_spark_session() -> SparkSession:
         .config("spark.es.nodes.wan.only", "false")
         # Quiet down Spark's own log4j (still visible in stdout for screenshots)
         .config("spark.sql.adaptive.enabled", "true")
+        # S3A connector configuration (M4)
+        .config("spark.hadoop.fs.s3a.access.key", os.environ.get("AWS_ACCESS_KEY_ID", ""))
+        .config("spark.hadoop.fs.s3a.secret.key", os.environ.get("AWS_SECRET_ACCESS_KEY", ""))
+        .config("spark.hadoop.fs.s3a.endpoint", f"s3.{os.environ.get('AWS_REGION', 'us-east-2')}.amazonaws.com")
+        .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
@@ -91,9 +100,9 @@ def create_spark_session() -> SparkSession:
 
 
 # ── pipeline stages ───────────────────────────────────────────────────────
-def read_from_hdfs(spark: SparkSession, log: logging.Logger) -> DataFrame:
-    log.info("Reading Parquet from %s", HDFS_PARQUET_URI)
-    df = spark.read.parquet(HDFS_PARQUET_URI)
+def read_from_s3(spark: SparkSession, log: logging.Logger) -> DataFrame:
+    log.info("Reading Parquet from %s", PARQUET_URI)
+    df = spark.read.parquet(PARQUET_URI)
     count = df.count()
     log.info("Read %d records from HDFS (%d columns)", count, len(df.columns))
     return df
@@ -298,7 +307,7 @@ def main() -> int:
              spark.sparkContext.master, spark.version)
 
     try:
-        df = read_from_hdfs(spark, log)
+        df = read_from_s3(spark, log)
         df = clean_data(df, log)
         df = add_derived_columns(df, log)
 

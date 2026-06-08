@@ -5,3 +5,4 @@ pymongo>=4.7
 elasticsearch>=8.13,<9
 fastapi>=0.110
 uvicorn[standard]>=0.27
+boto3>=1.34

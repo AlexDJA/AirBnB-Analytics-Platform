@@ -38,59 +38,10 @@ x-hadoop-common: &hadoop-common
 services:
 
   # ── HDFS NameNode ───────────────────────────────────────────
-  namenode:
-    <<: *hadoop-common
-    container_name: namenode
-    hostname: namenode
-    user: root
-    ports:
-      - "9870:9870"   # WebHDFS UI + REST API
-      - "8020:8020"   # HDFS RPC
-    command:
-      - bash
-      - -c
-      - |
-        mkdir -p /hadoop/dfs/name
-        chown -R hadoop:hadoop /hadoop/dfs/name
-        if [ ! -d /hadoop/dfs/name/current ]; then
-          echo "First boot — formatting NameNode"
-          su -s /bin/bash hadoop -c "hdfs namenode -format -nonInteractive"
-        else
-          echo "NameNode already formatted — skipping format step"
-        fi
-        su -s /bin/bash hadoop -c "hdfs namenode"
-    volumes:
-      - namenode_data:/hadoop/dfs/name
-      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
-      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9870"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
+  # Deleted for Milestone 4
 
   # ── HDFS DataNode ───────────────────────────────────────────
-  datanode:
-    <<: *hadoop-common
-    container_name: datanode
-    hostname: datanode
-    user: root
-    ports:
-      - "9864:9864"   # DataNode HTTP UI + WebHDFS data port
-    command:
-      - bash
-      - -c
-      - |
-        mkdir -p /hadoop/dfs/data
-        chown -R hadoop:hadoop /hadoop/dfs/data
-        su -s /bin/bash hadoop -c "hdfs datanode"
-    volumes:
-      - datanode_data:/hadoop/dfs/data
-      - ./hadoop/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml:ro
-      - ./hadoop/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml:ro
-    depends_on:
-      namenode:
-        condition: service_healthy
+    # Deleted for Milestone 4
 
   # ── MongoDB ─────────────────────────────────────────────────
   # M1 : service running + reachable. No data load required.
@@ -153,7 +104,7 @@ services:
       interval: 15s
       timeout: 10s
       retries: 8
-      start_period: 45s
+      start_period: 60s
 
   # ── Ingest job (one-shot) ───────────────────────────────────
   # Reads data/AirbnbEuropeMarket.csv, converts to Parquet
@@ -164,15 +115,13 @@ services:
     image: python:3.11-slim
     container_name: ingest
     working_dir: /app
+    env_file:                    
+      - .env 
     volumes:
       - .:/app
     networks:
       - pipeline-net
     depends_on:
-      namenode:
-        condition: service_healthy
-      datanode:
-        condition: service_started
       mongodb:
         condition: service_healthy
       elasticsearch:
@@ -199,15 +148,13 @@ services:
     container_name: spark_pipeline
     working_dir: /app
     user: root
+    env_file:                    
+      - .env
     volumes:
       - .:/app
     networks:
       - pipeline-net
     depends_on:
-      namenode:
-        condition: service_healthy
-      datanode:
-        condition: service_started
       mongodb:
         condition: service_healthy
       elasticsearch:
@@ -221,7 +168,7 @@ services:
         pip install -q pymongo requests
         && /opt/spark/bin/spark-submit
         --master local[*]
-        --packages org.mongodb.spark:mongo-spark-connector_2.12:10.3.0,org.elasticsearch:elasticsearch-spark-30_2.12:8.11.4
+        --packages org.mongodb.spark:mongo-spark-connector_2.12:10.3.0,org.elasticsearch:elasticsearch-spark-30_2.12:8.11.4,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.367
         /app/src/spark_pipeline.py
     restart: "no"
 
@@ -253,8 +200,6 @@ services:
 
 # ── Volumes ─────────────────────────────────────────────────────
 volumes:
-  namenode_data:
-  datanode_data:
   mongodb_data:
   es_data:
 

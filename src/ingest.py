@@ -1,8 +1,22 @@
 """
 ingest.py
 ---------
-M1 ingestion job: read the raw Airbnb Europe CSV, cast columns to proper
-types, serialize as Parquet (pyarrow), and upload to HDFS via WebHDFS.
+M4 ingestion job: read the raw Airbnb Europe CSV from S3, cast columns to
+proper types, serialize as Parquet (pyarrow), and write back to S3.
+
+This replaces the M1 HDFS-based ingestion. The original two-step WebHDFS
+PUT and the `hdfs_client` module are no longer used in the cloud
+deployment — S3 is the single source of truth for raw and processed
+data on AWS.
+
+Design decisions (see REFLECTION.md):
+  1. We cast types HERE (same as M1) so the Parquet on S3 carries a
+     typed schema for Spark to read in M2.
+  2. We use pandas with engine="python" and quoting=csv.QUOTE_ALL because
+     the raw CSV has ~0.5% malformed lines (broken escaping in the
+     `amenities` field). The C engine refuses to parse them.
+  3. Boolean columns are stored as pandas nullable `boolean`, preserving
+     <NA> for missing badges instead of falsely treating absence as False.
 """
 from __future__ import annotations
 
@@ -13,35 +27,29 @@ import os
 import sys
 from pathlib import Path
 
+import boto3
 import pandas as pd
+from botocore.exceptions import BotoCoreError, ClientError
 
-from hdfs_client import HDFSClient
 
+# ── configuration (env-driven, no hardcoded secrets) ──────────────────────
+AWS_REGION       = os.environ.get("AWS_REGION", "us-east-2")
+S3_BUCKET        = os.environ["S3_BUCKET"]
+S3_CSV_KEY       = os.environ.get("S3_CSV_KEY",     "data/AirbnbEuropeMarket.csv")
+S3_PARQUET_KEY   = os.environ.get("S3_PARQUET_KEY", "processed/airbnb_europe.parquet")
 
-# ── configuration ─────────────────────────────────────────────────────────
-CSV_PATH = Path(os.environ.get("CSV_PATH", "data/AirbnbEuropeMarket.csv"))
-HDFS_PATH = os.environ.get("HDFS_PATH", "/data/raw/airbnb_europe.parquet")
-HDFS_DIR = "/data/raw"
-
-LOG_DIR = Path("logs")
+LOG_DIR  = Path("logs")
 LOG_FILE = LOG_DIR / "ingest.log"
 
 
-# ── column type spec ──────────────────────────────────────────────────────
-# Columns kept as string (IDs, free text, categorical, URLs).
+# ── column type spec (unchanged from M1) ──────────────────────────────────
 STRING_COLS = [
     "listing_id", "listing_type", "room_type", "cover_photo_url",
     "host_id", "registration", "amenities", "cancellation_policy",
     "currency", "country", "state", "city",
 ]
 
-# Columns that should be real booleans. Stored as "true"/"false" strings in
-# the CSV; cast via map() to handle nulls cleanly (rather than astype(bool)
-# which would treat the literal string "false" as truthy).
 BOOL_COLS = ["superhost", "instant_book", "professional_management"]
-
-# All other numeric columns are float64 already after pandas inference.
-# We leave them alone — pyarrow will preserve the dtype in Parquet.
 
 
 def setup_logging() -> None:
@@ -57,33 +65,50 @@ def setup_logging() -> None:
     )
 
 
-def load_csv(path: Path) -> pd.DataFrame:
-    """Robust CSV reader that tolerates the malformed lines in this dataset."""
-    if not path.exists():
-        raise FileNotFoundError(
-            f"CSV not found at {path.resolve()}. "
-            "Place AirbnbEuropeMarket.csv in the data/ directory."
-        )
+def s3_client() -> "boto3.client":
+    """Single point where the boto3 S3 client is constructed.
 
-    logging.info("Reading CSV from %s", path)
+    Credentials come from the standard chain: env vars first
+    (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for local dev), then the
+    EC2 instance metadata service (the IAM role attached to the box in
+    production). The code is identical in both cases.
+    """
+    return boto3.client("s3", region_name=AWS_REGION)
+
+
+def read_csv_from_s3(bucket: str, key: str) -> pd.DataFrame:
+    """
+    Download the CSV from S3 into memory and parse it.
+    We stream the body into a BytesIO so pandas can use its Python
+    parser with the tolerant settings we need for the malformed rows.
+    """
+    logging.info("Downloading s3://%s/%s ...", bucket, key)
+    try:
+        obj = s3_client().get_object(Bucket=bucket, Key=key)
+    except (BotoCoreError, ClientError) as exc:
+        raise RuntimeError(
+            f"Could not read s3://{bucket}/{key}: {exc}"
+        ) from exc
+
+    raw_bytes = obj["Body"].read()
+    logging.info("Downloaded %.2f MB from S3", len(raw_bytes) / 1024 / 1024)
+
     df = pd.read_csv(
-        path,
+        io.BytesIO(raw_bytes),
         engine="python",
-        on_bad_lines="skip",      # ~0.5% of rows have broken escaping
+        on_bad_lines="skip",
         quoting=csv.QUOTE_ALL,
     )
-    logging.info("Loaded %d rows, %d columns", len(df), len(df.columns))
+    logging.info("Parsed CSV: %d rows, %d columns", len(df), len(df.columns))
     return df
 
 
 def cast_types(df: pd.DataFrame) -> pd.DataFrame:
     """Cast columns to their proper types before writing Parquet."""
-    # Ensure declared string columns are actually strings (no float NaN sneaking in).
     for col in STRING_COLS:
         if col in df.columns:
             df[col] = df[col].astype("string")
 
-    # Boolean cast: map literal "true"/"false" -> True/False; anything else -> NA.
     for col in BOOL_COLS:
         if col in df.columns:
             df[col] = (
@@ -91,19 +116,17 @@ def cast_types(df: pd.DataFrame) -> pd.DataFrame:
                 .astype("string")
                 .str.lower()
                 .map({"true": True, "false": False})
-                .astype("boolean")  # pandas nullable bool — survives NA values
+                .astype("boolean")
             )
 
-    # Sanity log of post-cast dtypes
     logging.info("Post-cast dtype summary:")
     for col, dtype in df.dtypes.items():
         logging.info("  %-32s %s", col, dtype)
-
     return df
 
 
-def to_parquet_bytes(df: pd.DataFrame) -> bytes:
-    """Serialize the DataFrame to Parquet (pyarrow) into an in-memory buffer."""
+def write_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str) -> None:
+    """Serialize the DataFrame to Parquet in memory and upload to S3."""
     buf = io.BytesIO()
     df.to_parquet(buf, engine="pyarrow", index=False, compression="snappy")
     payload = buf.getvalue()
@@ -111,37 +134,33 @@ def to_parquet_bytes(df: pd.DataFrame) -> bytes:
         "Serialized to Parquet: %d bytes (%.2f MB), compression=snappy",
         len(payload), len(payload) / 1024 / 1024,
     )
-    return payload
+
+    try:
+        s3_client().put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=payload,
+            ContentType="application/octet-stream",
+        )
+    except (BotoCoreError, ClientError) as exc:
+        raise RuntimeError(
+            f"Could not write s3://{bucket}/{key}: {exc}"
+        ) from exc
+    logging.info("Uploaded Parquet to s3://%s/%s", bucket, key)
 
 
 def main() -> int:
     setup_logging()
     logging.info("=" * 60)
-    logging.info("M1 ingestion job starting")
+    logging.info("M4 ingestion job starting (S3 → cast → S3)")
     logging.info("=" * 60)
 
     try:
-        df = load_csv(CSV_PATH)
+        df = read_csv_from_s3(S3_BUCKET, S3_CSV_KEY)
         df = cast_types(df)
-        parquet_bytes = to_parquet_bytes(df)
-
-        client = HDFSClient()
-        client.mkdirs(HDFS_DIR)
-        client.upload_bytes(parquet_bytes, HDFS_PATH, overwrite=True)
-
-        # Verify by reading file status back
-        info = client.status(HDFS_PATH)
-        if info is None:
-            logging.error("Upload reported success but file not found in HDFS!")
-            return 1
-
-        logging.info(
-            "HDFS confirmation: path=%s size=%d bytes owner=%s",
-            HDFS_PATH, info["length"], info["owner"],
-        )
+        write_parquet_to_s3(df, S3_BUCKET, S3_PARQUET_KEY)
         logging.info("Ingestion complete.")
         return 0
-
     except Exception as exc:
         logging.exception("Ingestion failed: %s", exc)
         return 1
